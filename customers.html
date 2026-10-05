@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="bn">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SURGICK - Customers</title>
+<link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@500;700&family=Inter:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<div class="top"><div class="logo">SUR<b>G</b>ICK</div><button id="out">Logout</button></div>
+<main>
+  <div class="row"><h2>Customers</h2><button class="sm" id="add">+ Customer</button></div>
+  <input class="search" id="q" placeholder="Nam / phone / address diye khujun">
+  <div id="list"><div class="empty">Loading...</div></div>
+</main>
+
+<div class="modal hidden" id="modal">
+  <form class="sheet" id="form">
+    <h2 id="mtitle">Notun customer</h2>
+    <label>Nam *</label><input id="name" required>
+    <label>Phone</label><input id="phone" type="tel" inputmode="tel">
+    <label>Address</label><input id="address">
+    <div class="err" id="err"></div>
+    <div class="btns">
+      <button type="button" class="ghost" id="cancel">Cancel</button>
+      <button type="submit" id="save">Save</button>
+    </div>
+  </form>
+</div>
+<nav class="nav" id="nav"></nav>
+
+<script type="module">
+import { db } from "./js/firebase-config.js";
+import { requireAuth, logout } from "./js/auth.js";
+import { esc, taka, renderNav } from "./js/util.js";
+import { collection, addDoc, updateDoc, deleteDoc, doc, onSnapshot, serverTimestamp, writeBatch, increment }
+  from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+
+renderNav("customers");
+const $ = (id) => document.getElementById(id);
+let list = [], role = "staff", editingId = null;
+
+function render() {
+  const q = $("q").value.trim().toLowerCase();
+  const rows = list.filter(c => [c.name, c.phone, c.address].join(" ").toLowerCase().includes(q));
+  if (!rows.length) { $("list").innerHTML = '<div class="empty">' + (list.length ? "Kichu pawa jay nai" : "Ekhono kono customer nei.") + "</div>"; return; }
+  $("list").innerHTML = rows.map(c => `<div class="card">
+    <div class="top2">
+      <div><div class="nm">${esc(c.name)}</div>
+      <div class="meta">${c.phone ? `<a style="color:inherit" href="tel:${esc(c.phone)}">${esc(c.phone)}</a>` : "Phone nei"}${c.address ? " · " + esc(c.address) : ""}</div></div>
+      <span class="badge ${c.due > 0 ? "low" : ""}">${c.due > 0 ? "Baki " + taka(c.due) : "Baki nai"}</span>
+    </div>
+    <div class="acts">
+      <button class="ghost" data-edit="${c.id}">Edit</button>
+      ${c.due > 0 ? `<button data-pay="${c.id}">Baki joma</button>` : ""}
+      ${role === "admin" && !(c.due > 0) ? `<button class="danger" data-del="${c.id}">Delete</button>` : ""}
+    </div></div>`).join("");
+}
+
+function openForm(c) {
+  editingId = c ? c.id : null;
+  $("mtitle").textContent = c ? "Customer edit" : "Notun customer";
+  $("name").value = c?.name ?? ""; $("phone").value = c?.phone ?? ""; $("address").value = c?.address ?? "";
+  $("err").textContent = ""; $("modal").classList.remove("hidden");
+}
+const closeForm = () => $("modal").classList.add("hidden");
+
+requireAuth((user, profile) => {
+  role = profile.role;
+  onSnapshot(collection(db, "customers"), (snap) => {
+    list = snap.docs.map(d => ({ id: d.id, ...d.data() })).sort((a, b) => (a.name || "").localeCompare(b.name || ""));
+    render();
+  }, () => { $("list").innerHTML = '<div class="empty">Data load hocche na. Rules check korun.</div>'; });
+});
+
+$("q").addEventListener("input", render);
+$("add").addEventListener("click", () => openForm(null));
+$("cancel").addEventListener("click", closeForm);
+$("out").addEventListener("click", logout);
+
+$("list").addEventListener("click", async (e) => {
+  const { edit, pay, del } = e.target.dataset;
+  if (edit) openForm(list.find(c => c.id === edit));
+  if (pay) {
+    const c = list.find(x => x.id === pay);
+    const amt = Number(prompt("Koto taka joma pelen? (Baki: " + taka(c.due) + ")"));
+    if (!amt || amt <= 0) return;
+    if (amt > c.due) { alert("Baki er cheye beshi hobe na."); return; }
+    try {
+      const b = writeBatch(db);
+      b.update(doc(db, "customers", pay), { due: increment(-amt) });
+      b.set(doc(collection(db, "payments")), { customerId: pay, customerName: c.name, amount: amt, createdAt: serverTimestamp() });
+      await b.commit();
+    } catch { alert("Save hoy nai."); }
+  }
+  if (del && confirm("Ei customer delete korben?")) {
+    try { await deleteDoc(doc(db, "customers", del)); } catch { alert("Delete kora gelo na."); }
+  }
+});
+
+$("form").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const data = { name: $("name").value.trim(), phone: $("phone").value.trim(), address: $("address").value.trim() };
+  $("save").disabled = true;
+  try {
+    if (editingId) await updateDoc(doc(db, "customers", editingId), data);
+    else await addDoc(collection(db, "customers"), { ...data, due: 0, createdAt: serverTimestamp() });
+    closeForm();
+  } catch { $("err").textContent = "Save hoy nai. Rules publish korechen kina check korun."; }
+  $("save").disabled = false;
+});
+</script>
+</body>
+</html>

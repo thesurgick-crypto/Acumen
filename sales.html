@@ -1,0 +1,254 @@
+<!DOCTYPE html>
+<html lang="bn">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SURGICK - Sales</title>
+<link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@500;700&family=Inter:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<div class="top"><div class="logo">SUR<b>G</b>ICK</div><button id="out">Logout</button></div>
+<main>
+  <div class="row"><h2>Sales</h2><button class="sm" id="add">+ Notun bikri</button></div>
+  <select class="filter" id="filter">
+    <option value="">Shob order</option>
+    <option>Pending</option><option>Confirmed</option><option>Shipped</option><option>Delivered</option><option>Returned</option>
+  </select>
+  <div id="list"><div class="empty">Loading...</div></div>
+</main>
+
+<div class="modal hidden" id="modal">
+  <form class="sheet full" id="form">
+    <h2>Notun bikri</h2>
+
+    <label>Customer</label>
+    <select id="cust"></select>
+    <div id="newCust" class="hidden">
+      <label>Customer nam *</label><input id="cName">
+      <label>Phone</label><input id="cPhone" type="tel" inputmode="tel">
+      <label>Address</label><input id="cAddr">
+    </div>
+
+    <label>Product jog korun</label>
+    <input id="pq" placeholder="Nam / SKU diye khujun" autocomplete="off">
+    <div id="pres"></div>
+    <div id="cart" style="margin-top:10px"></div>
+
+    <div class="two">
+      <div><label>Discount (৳)</label><input id="disc" type="number" min="0" step="any" inputmode="decimal" value="0"></div>
+      <div><label>Delivery charge (৳)</label><input id="del" type="number" min="0" step="any" inputmode="decimal" value="0"></div>
+    </div>
+    <div class="two">
+      <div><label>Joma pelen (৳)</label><input id="paid" type="number" min="0" step="any" inputmode="decimal" value="0"></div>
+      <div><label>Payment</label>
+        <select id="method"><option>Cash</option><option>bKash</option><option>Nagad</option><option>Bank</option><option>COD</option></select></div>
+    </div>
+    <button type="button" class="ghost mini" id="fullPaid" style="margin-top:8px">Puro taka joma</button>
+    <label>Order status</label>
+    <select id="status"><option>Pending</option><option selected>Confirmed</option><option>Shipped</option><option>Delivered</option></select>
+    <label>Note</label><input id="note" placeholder="Optional">
+
+    <div class="totals" id="tot"></div>
+    <div class="err" id="err"></div>
+    <div class="btns">
+      <button type="button" class="ghost" id="cancel">Cancel</button>
+      <button type="submit" id="save">Bikri save</button>
+    </div>
+  </form>
+</div>
+<nav class="nav" id="nav"></nav>
+
+<script type="module">
+import { db } from "./js/firebase-config.js";
+import { requireAuth, logout } from "./js/auth.js";
+import { esc, taka, fmtDate, renderNav } from "./js/util.js";
+import { collection, doc, onSnapshot, query, orderBy, limit, runTransaction, updateDoc, serverTimestamp }
+  from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+
+renderNav("sales");
+const $ = (id) => document.getElementById(id);
+const STATUSES = ["Pending", "Confirmed", "Shipped", "Delivered", "Returned"];
+let products = [], customers = [], sales = [], cart = [], me = "";
+
+/* ---------- sales list ---------- */
+function badgeClass(s) { return s === "Delivered" ? "" : s === "Returned" ? "low" : s === "Pending" ? "grey" : "warn"; }
+
+function renderList() {
+  const f = $("filter").value;
+  const rows = sales.filter(s => !f || s.status === f);
+  if (!rows.length) { $("list").innerHTML = '<div class="empty">' + (sales.length ? "Ei status e kono order nei" : "Ekhono kono bikri nei. + Notun bikri chapun.") + "</div>"; return; }
+  $("list").innerHTML = rows.map(s => `<div class="card">
+    <div class="top2">
+      <div><div class="nm">${esc(s.invoiceNo)} · ${esc(s.customerName || "Walk-in")}</div>
+      <div class="meta">${fmtDate(s.createdAt)} · ${s.items.length} item · ${esc(s.method)}</div></div>
+      <span class="badge ${badgeClass(s.status)}">${esc(s.status)}</span>
+    </div>
+    <div class="prices"><span>Total <b>${taka(s.total)}</b></span><span>Joma <b>${taka(s.paid)}</b></span>
+      <span>Baki <b style="color:${s.due > 0 ? "var(--bad)" : "inherit"}">${taka(s.due)}</b></span></div>
+    <div class="acts">
+      <select data-st="${s.id}" style="width:auto;padding:8px" ${s.status === "Returned" ? "disabled" : ""}>
+        ${STATUSES.map(x => `<option ${x === s.status ? "selected" : ""}>${x}</option>`).join("")}
+      </select>
+      <a class="linkbtn" href="bill.html?id=${s.id}">Bill</a>
+    </div></div>`).join("");
+}
+
+async function changeStatus(id, next) {
+  const s = sales.find(x => x.id === id);
+  if (!s || s.status === next) return;
+  if (next !== "Returned") { await updateDoc(doc(db, "sales", id), { status: next }); return; }
+  if (!confirm("Return hole stock fire ashbe ar baki (" + taka(s.due) + ") bad jabe. Ar fire kora jabe na. Cholbe?")) { renderList(); return; }
+  try {
+    await runTransaction(db, async (tx) => {
+      const saleRef = doc(db, "sales", id);
+      const sSnap = await tx.get(saleRef);
+      if (sSnap.data().status === "Returned") throw new Error("already");
+      const ps = [];
+      for (const it of s.items) ps.push(await tx.get(doc(db, "products", it.productId)));
+      let cSnap = null;
+      if (s.customerId) cSnap = await tx.get(doc(db, "customers", s.customerId));
+      ps.forEach((p, i) => { if (p.exists()) tx.update(p.ref, { stock: (p.data().stock || 0) + s.items[i].qty, updatedAt: serverTimestamp() }); });
+      if (cSnap && cSnap.exists()) tx.update(cSnap.ref, { due: Math.max(0, (cSnap.data().due || 0) - s.due) });
+      tx.update(saleRef, { status: "Returned", returnedDue: s.due, due: 0 });
+    });
+  } catch { alert("Return kora gelo na."); renderList(); }
+}
+
+/* ---------- new sale form ---------- */
+function fillCustomers() {
+  $("cust").innerHTML = '<option value="">Walk-in (record rakhbo na)</option><option value="new">+ Notun customer</option>' +
+    customers.map(c => `<option value="${c.id}">${esc(c.name)}${c.phone ? " · " + esc(c.phone) : ""}</option>`).join("");
+}
+
+function openForm() {
+  cart = []; $("form").reset(); fillCustomers(); $("newCust").classList.add("hidden");
+  $("pres").innerHTML = ""; $("err").textContent = ""; renderCart(); calc();
+  $("modal").classList.remove("hidden");
+}
+const closeForm = () => $("modal").classList.add("hidden");
+
+function addToCart(pid) {
+  const p = products.find(x => x.id === pid);
+  const ex = cart.find(c => c.productId === pid);
+  if (ex) { if (ex.qty < p.stock) ex.qty++; }
+  else cart.push({ productId: pid, name: p.name, qty: 1, price: p.sellPrice, stock: p.stock });
+  $("pq").value = ""; $("pres").innerHTML = ""; renderCart(); calc();
+}
+
+function renderCart() {
+  $("cart").innerHTML = cart.map((it, i) => `<div class="card">
+    <div class="top2"><div class="nm">${esc(it.name)}</div><button type="button" class="danger mini" data-rm="${i}">Bad dao</button></div>
+    <div class="two" style="margin-top:8px">
+      <div><label>Qty (stock ${it.stock})</label>
+        <div class="qty"><button type="button" data-dec="${i}">−</button><b>${it.qty}</b><button type="button" data-inc="${i}">+</button></div></div>
+      <div><label>Dam (৳)</label><input type="number" data-price="${i}" value="${it.price}" min="0" step="any" inputmode="decimal"></div>
+    </div></div>`).join("");
+}
+
+function calc() {
+  const sub = cart.reduce((s, c) => s + c.qty * c.price, 0);
+  const disc = Number($("disc").value) || 0, del = Number($("del").value) || 0, paid = Number($("paid").value) || 0;
+  const total = Math.max(0, sub - disc + del);
+  const due = Math.max(0, total - paid);
+  $("tot").innerHTML = `<div><span>Subtotal</span><span>${taka(sub)}</span></div>
+    <div><span>Discount</span><span>- ${taka(disc)}</span></div>
+    <div><span>Delivery</span><span>+ ${taka(del)}</span></div>
+    <div class="big"><span>Total</span><span>${taka(total)}</span></div>
+    <div><span>Baki</span><span style="color:${due > 0 ? "var(--bad)" : "var(--ok)"}">${taka(due)}</span></div>`;
+  return { sub, disc, del, paid, total, due };
+}
+
+$("pq").addEventListener("input", () => {
+  const q = $("pq").value.trim().toLowerCase();
+  if (!q) { $("pres").innerHTML = ""; return; }
+  const r = products.filter(p => p.stock > 0 && [p.name, p.sku, p.category].join(" ").toLowerCase().includes(q)).slice(0, 8);
+  $("pres").innerHTML = r.length ? r.map(p => `<div class="pick" data-add="${p.id}"><span>${esc(p.name)}<br><small>${p.stock} pcs</small></span><b>${taka(p.sellPrice)}</b></div>`).join("")
+    : '<div class="empty" style="padding:10px">Stock e nei ba pawa jay nai</div>';
+});
+$("pres").addEventListener("click", (e) => { const el = e.target.closest("[data-add]"); if (el) addToCart(el.dataset.add); });
+
+$("cart").addEventListener("click", (e) => {
+  const { rm, inc, dec } = e.target.dataset;
+  if (rm !== undefined) cart.splice(+rm, 1);
+  if (inc !== undefined && cart[+inc].qty < cart[+inc].stock) cart[+inc].qty++;
+  if (dec !== undefined && cart[+dec].qty > 1) cart[+dec].qty--;
+  if (rm !== undefined || inc !== undefined || dec !== undefined) { renderCart(); calc(); }
+});
+$("cart").addEventListener("input", (e) => {
+  if (e.target.dataset.price !== undefined) { cart[+e.target.dataset.price].price = Number(e.target.value) || 0; calc(); }
+});
+["disc", "del", "paid"].forEach(id => $(id).addEventListener("input", calc));
+$("fullPaid").addEventListener("click", () => { $("paid").value = calc().total; calc(); });
+$("cust").addEventListener("change", () => $("newCust").classList.toggle("hidden", $("cust").value !== "new"));
+
+$("form").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const err = $("err"); err.textContent = "";
+  const t = calc();
+  const cv = $("cust").value;
+  if (!cart.length) { err.textContent = "Kom pokkhe ekta product jog korun."; return; }
+  if (cv === "new" && !$("cName").value.trim()) { err.textContent = "Notun customer er nam din."; return; }
+  if (t.paid > t.total) { err.textContent = "Joma taka total er cheye beshi."; return; }
+  if (t.due > 0 && !cv) { err.textContent = "Baki thakle customer select ba notun customer din."; return; }
+  if (t.total < 0 || cart.some(c => c.price < 0)) { err.textContent = "Dam thik nai."; return; }
+
+  $("save").disabled = true;
+  const saleRef = doc(collection(db, "sales"));
+  const counterRef = doc(db, "meta", "counters");
+  const isNew = cv === "new";
+  const custRef = isNew ? doc(collection(db, "customers")) : cv ? doc(db, "customers", cv) : null;
+  const cInfo = isNew ? { name: $("cName").value.trim(), phone: $("cPhone").value.trim(), address: $("cAddr").value.trim() }
+    : cv ? customers.find(c => c.id === cv) : { name: "Walk-in", phone: "", address: "" };
+
+  try {
+    await runTransaction(db, async (tx) => {
+      const cSnap = await tx.get(counterRef);
+      const ps = [];
+      for (const it of cart) ps.push(await tx.get(doc(db, "products", it.productId)));
+      const custSnap = custRef && !isNew ? await tx.get(custRef) : null;
+
+      ps.forEach((p, i) => {
+        if (!p.exists()) throw new Error("Product pawa jay nai: " + cart[i].name);
+        if ((p.data().stock || 0) < cart[i].qty) throw new Error(cart[i].name + " er stock kom (" + p.data().stock + " pcs)");
+      });
+      const n = (cSnap.exists() ? cSnap.data().sale || 0 : 0) + 1;
+      const items = cart.map((it, i) => ({ productId: it.productId, name: it.name, qty: it.qty, price: it.price, cost: ps[i].data().buyPrice || 0 }));
+
+      ps.forEach((p, i) => tx.update(p.ref, { stock: p.data().stock - cart[i].qty, updatedAt: serverTimestamp() }));
+      tx.set(counterRef, { sale: n }, { merge: true });
+      if (isNew) tx.set(custRef, { ...cInfo, due: t.due, createdAt: serverTimestamp() });
+      else if (custRef) tx.update(custRef, { due: (custSnap.data().due || 0) + t.due });
+      tx.set(saleRef, {
+        invoiceNo: "SG-" + String(n).padStart(4, "0"),
+        customerId: custRef ? custRef.id : null,
+        customerName: cInfo.name, customerPhone: cInfo.phone || "", customerAddress: cInfo.address || "",
+        items, subtotal: t.sub, discount: t.disc, delivery: t.del, total: t.total, paid: t.paid, due: t.due,
+        method: $("method").value, status: $("status").value, note: $("note").value.trim(),
+        createdBy: me, createdAt: serverTimestamp()
+      });
+    });
+    location.href = "bill.html?id=" + saleRef.id;
+  } catch (ex) {
+    err.textContent = ex.message && !ex.code ? ex.message : "Save hoy nai. Rules publish korechen kina check korun.";
+    $("save").disabled = false;
+  }
+});
+
+requireAuth((user, profile) => {
+  me = profile.name || user.email;
+  onSnapshot(collection(db, "products"), (s) => { products = s.docs.map(d => ({ id: d.id, ...d.data() })); });
+  onSnapshot(collection(db, "customers"), (s) => { customers = s.docs.map(d => ({ id: d.id, ...d.data() })).sort((a, b) => (a.name || "").localeCompare(b.name || "")); });
+  onSnapshot(query(collection(db, "sales"), orderBy("createdAt", "desc"), limit(50)), (s) => {
+    sales = s.docs.map(d => ({ id: d.id, ...d.data() })); renderList();
+  }, () => { $("list").innerHTML = '<div class="empty">Data load hocche na. Rules check korun.</div>'; });
+});
+
+$("add").addEventListener("click", openForm);
+$("cancel").addEventListener("click", closeForm);
+$("filter").addEventListener("change", renderList);
+$("list").addEventListener("change", (e) => { if (e.target.dataset.st) changeStatus(e.target.dataset.st, e.target.value); });
+$("out").addEventListener("click", logout);
+</script>
+</body>
+</html>

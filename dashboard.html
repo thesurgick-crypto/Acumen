@@ -8,45 +8,55 @@
 <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
-<div class="top">
-  <div class="logo">SUR<b>G</b>ICK</div>
-  <button id="out">Logout</button>
-</div>
+<div class="top"><div class="logo">SUR<b>G</b>ICK</div><button id="out">Logout</button></div>
 <main>
   <div class="hello" id="hello">Loading...</div>
   <h2>Dashboard</h2>
   <div class="grid">
-    <div class="stat"><span>Ajker bikri</span><p>৳ 0</p></div>
-    <div class="stat"><span>Profit</span><p style="color:var(--ok)">৳ 0</p></div>
-    <div class="stat"><span>Baki</span><p style="color:var(--bad)">৳ 0</p></div>
+    <div class="stat"><span>Ajker bikri</span><p id="todaySales">৳ 0</p></div>
+    <div class="stat"><span>Ajker profit</span><p style="color:var(--ok)" id="todayProfit">৳ 0</p></div>
+    <div class="stat"><span>Mot baki</span><p style="color:var(--bad)" id="due">৳ 0</p></div>
     <div class="stat"><span>Low stock</span><p style="color:var(--orange)" id="lowCount">0</p></div>
     <div class="stat"><span>Total product</span><p id="prodCount">0</p></div>
     <div class="stat"><span>Stock er dam (kena)</span><p id="stockValue">৳ 0</p></div>
   </div>
 </main>
-<nav class="nav">
-  <a class="on" href="dashboard.html">Home</a>
-  <a href="#">Sales</a>
-  <a href="products.html">Stock</a>
-  <a href="#">Hishab</a>
-  <a href="#">More</a>
-</nav>
+<nav class="nav" id="nav"></nav>
 <script type="module">
 import { db } from "./js/firebase-config.js";
 import { requireAuth, logout } from "./js/auth.js";
-import { collection, onSnapshot } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+import { taka, renderNav } from "./js/util.js";
+import { collection, onSnapshot, query, where, Timestamp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+
+renderNav("home");
+const $ = (id) => document.getElementById(id);
 
 requireAuth((user, profile) => {
-  document.getElementById("hello").textContent = "Hi " + (profile.name || user.email) + " (" + profile.role + ")";
+  $("hello").textContent = "Hi " + (profile.name || user.email) + " (" + profile.role + ")";
+
   onSnapshot(collection(db, "products"), (snap) => {
     const list = snap.docs.map(d => d.data());
-    document.getElementById("prodCount").textContent = list.length;
-    document.getElementById("lowCount").textContent = list.filter(p => p.stock <= (p.lowAlert ?? 3)).length;
-    const v = list.reduce((s, p) => s + (p.stock || 0) * (p.buyPrice || 0), 0);
-    document.getElementById("stockValue").textContent = "৳ " + v.toLocaleString("en-US");
+    $("prodCount").textContent = list.length;
+    $("lowCount").textContent = list.filter(p => p.stock <= (p.lowAlert ?? 3)).length;
+    $("stockValue").textContent = taka(list.reduce((s, p) => s + (p.stock || 0) * (p.buyPrice || 0), 0));
+  });
+
+  onSnapshot(collection(db, "customers"), (snap) => {
+    $("due").textContent = taka(snap.docs.reduce((s, d) => s + (d.data().due || 0), 0));
+  });
+
+  const start = new Date(); start.setHours(0, 0, 0, 0);
+  onSnapshot(query(collection(db, "sales"), where("createdAt", ">=", Timestamp.fromDate(start))), (snap) => {
+    let sales = 0, profit = 0;
+    snap.docs.map(d => d.data()).filter(s => s.status !== "Returned").forEach(s => {
+      sales += s.total;
+      profit += s.subtotal - s.discount - s.items.reduce((a, i) => a + i.qty * i.cost, 0);
+    });
+    $("todaySales").textContent = taka(sales);
+    $("todayProfit").textContent = taka(profit);
   });
 });
-document.getElementById("out").addEventListener("click", logout);
+$("out").addEventListener("click", logout);
 </script>
 </body>
 </html>

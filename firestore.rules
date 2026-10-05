@@ -11,11 +11,26 @@ service cloud.firestore {
       allow write: if false;
     }
 
-    // Step 2: products
     match /products/{id} {
-      allow read: if isStaff();
-      allow create, update: if isStaff();
+      allow read, create, update: if isStaff();
       allow delete: if isAdmin();
+    }
+
+    // Step 3
+    match /customers/{id} {
+      allow read, create, update: if isStaff();
+      allow delete: if isAdmin();
+    }
+    match /sales/{id} {
+      allow read, create, update: if isStaff();
+      allow delete: if false;
+    }
+    match /payments/{id} {
+      allow read, create: if isStaff();
+      allow update, delete: if false;
+    }
+    match /meta/{id} {
+      allow read, write: if isStaff();
     }
 
     match /{document=**} {
