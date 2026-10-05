@@ -76,3 +76,14 @@ select{width:100%;background:var(--bg);border:1px solid var(--line);border-radiu
 .line:last-child{border-bottom:0}
 .box{background:var(--card);border:1px solid var(--line);border-radius:10px}
 .bar{height:6px;background:var(--orange);border-radius:3px;margin-top:6px}
+
+/* ---- Step 5: Reports / Team ---- */
+.chart{display:flex;align-items:flex-end;gap:2px;height:130px;padding:10px 8px 0}
+.chart .col{flex:1;display:flex;flex-direction:column;justify-content:flex-end;height:100%}
+.chart .bar2{width:100%;background:var(--orange);border-radius:2px 2px 0 0;min-height:1px}
+.xl{display:flex;gap:2px;padding:4px 8px 10px;font-size:9px;color:var(--muted)}
+.xl span{flex:1;text-align:center;overflow:hidden}
+.rk{display:flex;gap:10px;align-items:center}
+.rk i{font-style:normal;color:var(--orange);font-family:Orbitron,sans-serif;font-size:13px;min-width:18px}
+.rk small{color:var(--muted);display:block;font-size:12px}
+.rt{text-align:right;white-space:nowrap}
