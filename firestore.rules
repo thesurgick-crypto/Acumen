@@ -29,6 +29,25 @@ service cloud.firestore {
       allow read, create: if isStaff();
       allow update, delete: if false;
     }
+
+    // Step 4
+    match /suppliers/{id} {
+      allow read, create, update: if isStaff();
+      allow delete: if isAdmin();
+    }
+    match /purchases/{id} {
+      allow read, create: if isStaff();
+      allow update, delete: if false;
+    }
+    match /supplierPayments/{id} {
+      allow read, create: if isStaff();
+      allow update, delete: if false;
+    }
+    match /expenses/{id} {
+      allow read, create, update: if isStaff();
+      allow delete: if isAdmin();
+    }
+
     match /meta/{id} {
       allow read, write: if isStaff();
     }

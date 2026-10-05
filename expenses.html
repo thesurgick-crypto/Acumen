@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="bn">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SURGICK - Kharoch</title>
+<link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@500;700&family=Inter:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<div class="top"><div class="logo">SUR<b>G</b>ICK</div><button id="out">Logout</button></div>
+<main>
+  <div class="row"><h2>Kharoch</h2><button class="sm" id="add">+ Kharoch</button></div>
+  <input class="search" id="month" type="month">
+  <div class="stat" style="margin-bottom:12px"><span>Ei mash er mot kharoch</span><p id="total" style="color:var(--bad)">৳ 0</p></div>
+  <div id="cats"></div>
+  <div class="sec">KHAROCH ER LIST</div>
+  <div id="list"><div class="empty">Loading...</div></div>
+</main>
+
+<div class="modal hidden" id="modal">
+  <form class="sheet" id="form">
+    <h2>Notun kharoch</h2>
+    <label>Category</label>
+    <select id="cat">
+      <option>Ad cost (Facebook)</option><option>Delivery / Courier</option><option>Packaging</option>
+      <option>Transport</option><option>Rent</option><option>Salary</option><option>Bill (net/current)</option><option>Onnano</option>
+    </select>
+    <div class="two">
+      <div><label>Taka (৳) *</label><input id="amount" type="number" min="1" step="any" inputmode="decimal" required></div>
+      <div><label>Tarikh</label><input id="date" type="date" required></div>
+    </div>
+    <label>Note</label><input id="note" placeholder="Optional">
+    <div class="err" id="err"></div>
+    <div class="btns">
+      <button type="button" class="ghost" id="cancel">Cancel</button>
+      <button type="submit" id="save">Save</button>
+    </div>
+  </form>
+</div>
+<nav class="nav" id="nav"></nav>
+
+<script type="module">
+import { db } from "./js/firebase-config.js";
+import { requireAuth, logout } from "./js/auth.js";
+import { esc, taka, renderNav } from "./js/util.js";
+import { collection, addDoc, deleteDoc, doc, query, where, getDocs, Timestamp, serverTimestamp }
+  from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+
+renderNav("hishab");
+const $ = (id) => document.getElementById(id);
+let role = "staff", me = "", items = [];
+const pad = (n) => String(n).padStart(2, "0");
+const todayStr = () => { const d = new Date(); return d.getFullYear() + "-" + pad(d.getMonth() + 1) + "-" + pad(d.getDate()); };
+$("month").value = todayStr().slice(0, 7);
+
+async function load() {
+  $("list").innerHTML = '<div class="empty">Loading...</div>';
+  const [y, m] = $("month").value.split("-").map(Number);
+  const from = Timestamp.fromDate(new Date(y, m - 1, 1)), to = Timestamp.fromDate(new Date(y, m, 1));
+  try {
+    const snap = await getDocs(query(collection(db, "expenses"), where("date", ">=", from), where("date", "<", to)));
+    items = snap.docs.map(d => ({ id: d.id, ...d.data() })).sort((a, b) => b.date.seconds - a.date.seconds);
+    render();
+  } catch { $("list").innerHTML = '<div class="empty">Data load hocche na. Rules check korun.</div>'; }
+}
+
+function render() {
+  const total = items.reduce((s, x) => s + x.amount, 0);
+  $("total").textContent = taka(total);
+  const by = {};
+  items.forEach(x => by[x.category] = (by[x.category] || 0) + x.amount);
+  const rows = Object.entries(by).sort((a, b) => b[1] - a[1]);
+  $("cats").innerHTML = rows.length ? '<div class="box">' + rows.map(([c, v]) => `<div class="line" style="display:block">
+    <div style="display:flex;justify-content:space-between"><span>${esc(c)}</span><b>${taka(v)}</b></div>
+    <div class="bar" style="width:${Math.max(4, v / total * 100)}%"></div></div>`).join("") + "</div>" : "";
+  $("list").innerHTML = items.length ? items.map(x => `<div class="card">
+    <div class="top2"><div><div class="nm">${esc(x.category)}</div>
+    <div class="meta">${x.date.toDate().toLocaleDateString("en-GB", { day: "2-digit", month: "short" })}${x.note ? " · " + esc(x.note) : ""}</div></div>
+    <b>${taka(x.amount)}</b></div>
+    ${role === "admin" ? `<div class="acts"><button class="danger" data-del="${x.id}">Delete</button></div>` : ""}</div>`).join("")
+    : '<div class="empty">Ei mashe kono kharoch nei.</div>';
+}
+
+requireAuth((user, profile) => { role = profile.role; me = profile.name || user.email; load(); });
+$("month").addEventListener("change", load);
+$("add").addEventListener("click", () => { $("form").reset(); $("date").value = todayStr(); $("err").textContent = ""; $("modal").classList.remove("hidden"); });
+$("cancel").addEventListener("click", () => $("modal").classList.add("hidden"));
+$("out").addEventListener("click", logout);
+$("list").addEventListener("click", async (e) => {
+  const id = e.target.dataset.del;
+  if (id && confirm("Ei kharoch delete korben?")) { try { await deleteDoc(doc(db, "expenses", id)); load(); } catch { alert("Delete kora gelo na."); } }
+});
+$("form").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const amount = Number($("amount").value);
+  if (!(amount > 0)) { $("err").textContent = "Taka ta thik din."; return; }
+  $("save").disabled = true;
+  try {
+    await addDoc(collection(db, "expenses"), {
+      category: $("cat").value, amount, note: $("note").value.trim(),
+      date: Timestamp.fromDate(new Date($("date").value + "T12:00:00")), createdBy: me, createdAt: serverTimestamp()
+    });
+    $("modal").classList.add("hidden"); load();
+  } catch { $("err").textContent = "Save hoy nai. Rules publish korechen kina check korun."; }
+  $("save").disabled = false;
+});
+</script>
+</body>
+</html>

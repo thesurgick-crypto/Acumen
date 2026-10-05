@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="bn">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SURGICK - Hishab</title>
+<link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@500;700&family=Inter:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<div class="top"><div class="logo">SUR<b>G</b>ICK</div><button id="out">Logout</button></div>
+<main>
+  <h2>Hishab</h2>
+  <div class="links">
+    <a class="linkbtn" href="purchases.html">Mal kena (Purchase)</a>
+    <a class="linkbtn" href="expenses.html">Kharoch</a>
+  </div>
+  <div id="body"><div class="empty">Loading...</div></div>
+</main>
+<nav class="nav" id="nav"></nav>
+
+<script type="module">
+import { db } from "./js/firebase-config.js";
+import { requireAuth, logout } from "./js/auth.js";
+import { esc, taka, renderNav } from "./js/util.js";
+import { collection, query, where, getDocs, Timestamp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+
+renderNav("hishab");
+const $ = (id) => document.getElementById(id);
+const sel = document.createElement("select");
+sel.className = "filter";
+sel.innerHTML = '<option value="today">Ajke</option><option value="month" selected>Ei mash</option><option value="all">Shob somoy</option>';
+$("body").before(sel);
+
+const startOf = (k) => { const d = new Date(); d.setHours(0, 0, 0, 0);
+  if (k === "month") d.setDate(1); if (k === "all") return new Date(0); return d; };
+
+async function load() {
+  $("body").innerHTML = '<div class="empty">Loading...</div>';
+  const from = Timestamp.fromDate(startOf(sel.value));
+  const q = (c, f) => getDocs(query(collection(db, c), where(f, ">=", from)));
+  try {
+    const [s, e, p, pay, cu, su] = await Promise.all([q("sales", "createdAt"), q("expenses", "date"), q("purchases", "createdAt"), q("payments", "createdAt"),
+      getDocs(collection(db, "customers")), getDocs(collection(db, "suppliers"))]);
+
+    const sales = s.docs.map(d => d.data()).filter(x => x.status !== "Returned");
+    const revenue = sales.reduce((a, x) => a + x.total, 0);
+    const goods = sales.reduce((a, x) => a + x.subtotal - x.discount, 0);
+    const cogs = sales.reduce((a, x) => a + x.items.reduce((b, i) => b + i.qty * i.cost, 0), 0);
+    const gross = goods - cogs;
+    const exp = e.docs.map(d => d.data());
+    const expTotal = exp.reduce((a, x) => a + x.amount, 0);
+    const net = gross - expTotal;
+    const cashIn = sales.reduce((a, x) => a + x.paid, 0) + pay.docs.reduce((a, d) => a + d.data().amount, 0);
+    const buyTotal = p.docs.reduce((a, d) => a + d.data().total, 0);
+    const buyPaid = p.docs.reduce((a, d) => a + d.data().paid, 0);
+    const custDue = cu.docs.reduce((a, d) => a + (d.data().due || 0), 0);
+    const supDue = su.docs.reduce((a, d) => a + (d.data().due || 0), 0);
+    const by = {}; exp.forEach(x => by[x.category] = (by[x.category] || 0) + x.amount);
+    const cats = Object.entries(by).sort((a, b) => b[1] - a[1]);
+
+    $("body").innerHTML = `
+      <div class="grid">
+        <div class="stat"><span>Mot bikri (${sales.length} ta order)</span><p>${taka(revenue)}</p></div>
+        <div class="stat"><span>Mal er kena dam</span><p>${taka(cogs)}</p></div>
+        <div class="stat"><span>Gross lav</span><p style="color:var(--ok)">${taka(gross)}</p></div>
+        <div class="stat"><span>Kharoch</span><p style="color:var(--bad)">${taka(expTotal)}</p></div>
+      </div>
+      <div class="stat" style="margin-top:10px"><span>Net lav (gross lav - kharoch)</span>
+        <p style="color:${net >= 0 ? "var(--ok)" : "var(--bad)"}">${taka(net)}</p></div>
+
+      <div class="sec">TAKA ASHA / JAWA</div>
+      <div class="box">
+        <div class="line"><span>Hate pelam (bikri + baki joma)</span><b>${taka(cashIn)}</b></div>
+        <div class="line"><span>Mal kenar total</span><b>${taka(buyTotal)}</b></div>
+        <div class="line"><span>Supplier ke dilam</span><b>${taka(buyPaid)}</b></div>
+      </div>
+
+      <div class="sec">BAKI (ekhon porjonto)</div>
+      <div class="box">
+        <div class="line"><span>Customer er kach theke pabo</span><b style="color:var(--ok)">${taka(custDue)}</b></div>
+        <div class="line"><span>Supplier ke debo</span><b style="color:var(--bad)">${taka(supDue)}</b></div>
+      </div>
+
+      ${cats.length ? `<div class="sec">KHAROCH BHAGE</div><div class="box">` + cats.map(([c, v]) => `<div class="line"><span>${esc(c)}</span><b>${taka(v)}</b></div>`).join("") + "</div>" : ""}
+      <div class="empty" style="font-size:12px">Return howa order gulo hishab e dhora hoyni. Delivery charge lave dhora hoy na.</div>`;
+  } catch { $("body").innerHTML = '<div class="empty">Data load hocche na. Rules publish korechen kina check korun.</div>'; }
+}
+
+requireAuth((user, profile) => {
+  if (profile.role !== "admin") {
+    sel.remove();
+    document.querySelector(".links").remove();
+    $("body").innerHTML = '<div class="empty">Hishab shudhu Admin dekhte parbe.</div>';
+    return;
+  }
+  load();
+});
+sel.addEventListener("change", load);
+$("out").addEventListener("click", logout);
+</script>
+</body>
+</html>
