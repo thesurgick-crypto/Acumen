@@ -51,3 +51,19 @@ select{width:100%;background:var(--bg);border:1px solid var(--line);border-radiu
 .two{display:grid;grid-template-columns:1fr 1fr;gap:10px}
 .btns{display:flex;gap:10px;margin-top:18px}
 .btns button{margin:0}
+
+/* ---- Step 3: Sales / Customers ---- */
+.qty{display:flex;align-items:center;gap:10px;margin-top:2px}
+.qty button{width:40px;margin:0;padding:8px;font-size:18px}
+.qty b{min-width:24px;text-align:center}
+.pick{display:flex;justify-content:space-between;gap:10px;padding:10px;border:1px solid var(--line);border-radius:8px;margin-top:6px;cursor:pointer;font-size:14px}
+.pick small{color:var(--muted)}
+.totals{background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:12px;margin-top:14px;font-size:14px}
+.totals div{display:flex;justify-content:space-between;padding:3px 0}
+.totals .big{font-size:17px;font-weight:500;color:var(--orange);border-top:1px solid var(--line);margin-top:6px;padding-top:8px}
+.linkbtn{display:inline-block;color:var(--text);text-decoration:none;border:1px solid var(--line);border-radius:8px;padding:8px 12px;font-size:13px}
+.badge.warn{border-color:var(--orange);color:var(--orange)}
+.badge.grey{border-color:var(--muted);color:var(--muted)}
+.filter{margin-bottom:12px}
+.full{max-width:560px;border-radius:14px 14px 0 0}
+.mini{font-size:12px;padding:6px 10px;margin:0;width:auto}
