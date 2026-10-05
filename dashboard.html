@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="bn">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SURGICK - Dashboard</title>
+<link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@500;700&family=Inter:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<div class="top">
+  <div class="logo">SUR<b>G</b>ICK</div>
+  <button id="out">Logout</button>
+</div>
+<main>
+  <div class="hello" id="hello">Loading...</div>
+  <h2>Dashboard</h2>
+  <div class="grid">
+    <div class="stat"><span>Ajker bikri</span><p>৳ 0</p></div>
+    <div class="stat"><span>Profit</span><p style="color:var(--ok)">৳ 0</p></div>
+    <div class="stat"><span>Baki</span><p style="color:var(--bad)">৳ 0</p></div>
+    <div class="stat"><span>Low stock</span><p style="color:var(--orange)">0</p></div>
+  </div>
+</main>
+<nav class="nav">
+  <a class="on" href="dashboard.html">Home</a>
+  <a href="#">Sales</a>
+  <a href="#">Stock</a>
+  <a href="#">Hishab</a>
+  <a href="#">More</a>
+</nav>
+<script type="module">
+import { requireAuth, logout } from "./js/auth.js";
+requireAuth((user, profile) => {
+  document.getElementById("hello").textContent = "Hi " + (profile.name || user.email) + " (" + profile.role + ")";
+});
+document.getElementById("out").addEventListener("click", logout);
+</script>
+</body>
+</html>

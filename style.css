@@ -1,0 +1,27 @@
+:root{--bg:#0A0A0A;--card:#161616;--line:#2A2A2A;--orange:#FF5A1F;--text:#FFFFFF;--muted:#A1A1AA;--ok:#22C55E;--bad:#EF4444}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--bg);color:var(--text);font-family:Inter,sans-serif;min-height:100vh}
+.logo{font-family:Orbitron,sans-serif;font-weight:700;letter-spacing:2px}
+.logo b{color:var(--orange)}
+.tagline{color:var(--muted);font-size:13px;letter-spacing:1px;margin-top:6px}
+.center{min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:20px}
+.panel{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:20px;width:100%;max-width:380px;margin-top:28px}
+h2{font-family:Orbitron,sans-serif;font-size:15px;margin-bottom:16px}
+label{display:block;color:var(--muted);font-size:12px;margin:12px 0 4px}
+input{width:100%;background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:11px;color:var(--text);font-size:15px}
+input:focus{outline:none;border-color:var(--orange)}
+button{width:100%;margin-top:18px;background:var(--orange);color:#0A0A0A;border:0;border-radius:8px;padding:12px;font-size:15px;font-weight:500;cursor:pointer}
+button:disabled{opacity:.6}
+.err{color:var(--bad);font-size:13px;margin-top:12px;min-height:18px}
+.top{display:flex;justify-content:space-between;align-items:center;padding:14px 16px;border-bottom:1px solid var(--line)}
+.top .logo{font-size:18px}
+.top button{width:auto;margin:0;background:transparent;color:var(--muted);border:1px solid var(--line);padding:7px 12px;font-size:13px}
+main{padding:16px 16px 90px;max-width:900px;margin:0 auto}
+.hello{color:var(--muted);font-size:13px;margin-bottom:14px}
+.grid{display:grid;grid-template-columns:repeat(2,1fr);gap:10px}
+.stat{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:14px}
+.stat span{color:var(--muted);font-size:12px}
+.stat p{font-size:20px;font-weight:500;margin-top:4px}
+.nav{position:fixed;bottom:0;left:0;right:0;display:flex;justify-content:space-around;background:var(--card);border-top:1px solid var(--line);padding:10px 4px}
+.nav a{color:var(--muted);text-decoration:none;font-size:12px}
+.nav a.on{color:var(--orange)}

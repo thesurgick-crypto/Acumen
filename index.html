@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="bn">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SURGICK - Login</title>
+<link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@500;700&family=Inter:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<div class="center">
+  <div style="text-align:center">
+    <div class="logo" style="font-size:34px">SUR<b>G</b>ICK</div>
+    <div class="tagline">Collect. Explore. Upgrade.</div>
+  </div>
+  <form class="panel" id="form">
+    <h2>Login</h2>
+    <label for="email">Email</label>
+    <input id="email" type="email" autocomplete="username" required>
+    <label for="pass">Password</label>
+    <input id="pass" type="password" autocomplete="current-password" required>
+    <button id="btn" type="submit">Login</button>
+    <div class="err" id="err"></div>
+  </form>
+</div>
+<script type="module">
+import { auth } from "./js/firebase-config.js";
+import { onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
+import { login, friendlyError } from "./js/auth.js";
+
+onAuthStateChanged(auth, (u) => { if (u && !window.__loggingIn) location.href = "dashboard.html"; });
+
+document.getElementById("form").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const btn = document.getElementById("btn"), err = document.getElementById("err");
+  err.textContent = ""; btn.disabled = true; btn.textContent = "Login hocche...";
+  window.__loggingIn = true;
+  try {
+    await login(email.value.trim(), pass.value);
+    location.href = "dashboard.html";
+  } catch (ex) {
+    window.__loggingIn = false;
+    err.textContent = friendlyError(ex);
+    btn.disabled = false; btn.textContent = "Login";
+  }
+});
+</script>
+</body>
+</html>
