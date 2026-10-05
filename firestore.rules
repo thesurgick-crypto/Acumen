@@ -3,13 +3,23 @@ service cloud.firestore {
   match /databases/{database}/documents {
     function signedIn() { return request.auth != null; }
     function role() { return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role; }
+    function isStaff() { return signedIn() && role() in ['admin', 'staff']; }
+    function isAdmin() { return signedIn() && role() == 'admin'; }
 
     match /users/{uid} {
-      allow read: if signedIn() && (request.auth.uid == uid || role() == 'admin');
-      allow write: if false; // Step 1: user Firebase Console theke banan
+      allow read: if signedIn() && (request.auth.uid == uid || isAdmin());
+      allow write: if false;
     }
+
+    // Step 2: products
+    match /products/{id} {
+      allow read: if isStaff();
+      allow create, update: if isStaff();
+      allow delete: if isAdmin();
+    }
+
     match /{document=**} {
-      allow read, write: if false; // baki collection gulo porer step e khulbo
+      allow read, write: if false;
     }
   }
 }

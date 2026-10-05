@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="bn">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SURGICK - Stock</title>
+<link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@500;700&family=Inter:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<div class="top">
+  <div class="logo">SUR<b>G</b>ICK</div>
+  <button id="out">Logout</button>
+</div>
+<main>
+  <div class="row"><h2>Stock</h2><button class="sm" id="add">+ Product</button></div>
+  <input class="search" id="q" placeholder="Nam / SKU / category diye khujun">
+  <div id="list"><div class="empty">Loading...</div></div>
+</main>
+
+<div class="modal hidden" id="modal">
+  <form class="sheet" id="form">
+    <h2 id="mtitle">Notun product</h2>
+    <label>Product er nam *</label>
+    <input id="name" required>
+    <div class="two">
+      <div><label>Category</label><input id="category" placeholder="Hot Wheels, Gadget..."></div>
+      <div><label>SKU / code</label><input id="sku"></div>
+    </div>
+    <div class="two">
+      <div><label>Kena dam (৳) *</label><input id="buy" type="number" min="0" step="any" inputmode="decimal" required></div>
+      <div><label>Becha dam (৳) *</label><input id="sell" type="number" min="0" step="any" inputmode="decimal" required></div>
+    </div>
+    <div class="two">
+      <div><label>Stock (pcs) *</label><input id="stock" type="number" min="0" step="1" inputmode="numeric" required></div>
+      <div><label>Low stock alert</label><input id="low" type="number" min="0" step="1" inputmode="numeric" value="3"></div>
+    </div>
+    <label>Supplier</label>
+    <input id="supplier">
+    <div class="err" id="err"></div>
+    <div class="btns">
+      <button type="button" class="ghost" id="cancel">Cancel</button>
+      <button type="submit" id="save">Save</button>
+    </div>
+  </form>
+</div>
+
+<nav class="nav">
+  <a href="dashboard.html">Home</a>
+  <a href="#">Sales</a>
+  <a class="on" href="products.html">Stock</a>
+  <a href="#">Hishab</a>
+  <a href="#">More</a>
+</nav>
+
+<script type="module">
+import { db } from "./js/firebase-config.js";
+import { requireAuth, logout } from "./js/auth.js";
+import { collection, addDoc, updateDoc, deleteDoc, doc, onSnapshot, serverTimestamp }
+  from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+
+const $ = (id) => document.getElementById(id);
+let products = [], role = "staff", editingId = null;
+
+function esc(s) { const d = document.createElement("div"); d.textContent = s ?? ""; return d.innerHTML; }
+const taka = (n) => "৳ " + Number(n || 0).toLocaleString("en-US");
+
+function render() {
+  const q = $("q").value.trim().toLowerCase();
+  const rows = products.filter(p => [p.name, p.sku, p.category].join(" ").toLowerCase().includes(q));
+  if (!rows.length) {
+    $("list").innerHTML = '<div class="empty">' + (products.length ? "Kichu pawa jay nai" : "Ekhono kono product nei. + Product chepe prothom ta jog korun.") + "</div>";
+    return;
+  }
+  $("list").innerHTML = rows.map(p => {
+    const low = p.stock <= (p.lowAlert ?? 3);
+    return `<div class="card">
+      <div class="top2">
+        <div><div class="nm">${esc(p.name)}</div>
+        <div class="meta">${esc(p.category || "-")}${p.sku ? " · " + esc(p.sku) : ""}</div></div>
+        <span class="badge ${low ? "low" : ""}">${p.stock} pcs${low ? " · low" : ""}</span>
+      </div>
+      <div class="prices">
+        <span>Kena <b>${taka(p.buyPrice)}</b></span>
+        <span>Becha <b>${taka(p.sellPrice)}</b></span>
+        <span>Lav <b>${taka(p.sellPrice - p.buyPrice)}</b></span>
+      </div>
+      <div class="acts">
+        <button class="ghost" data-edit="${p.id}">Edit</button>
+        ${role === "admin" ? `<button class="danger" data-del="${p.id}">Delete</button>` : ""}
+      </div>
+    </div>`;
+  }).join("");
+}
+
+function openForm(p) {
+  editingId = p ? p.id : null;
+  $("mtitle").textContent = p ? "Product edit" : "Notun product";
+  $("name").value = p?.name ?? "";
+  $("category").value = p?.category ?? "";
+  $("sku").value = p?.sku ?? "";
+  $("buy").value = p?.buyPrice ?? "";
+  $("sell").value = p?.sellPrice ?? "";
+  $("stock").value = p?.stock ?? "";
+  $("low").value = p?.lowAlert ?? 3;
+  $("supplier").value = p?.supplier ?? "";
+  $("err").textContent = "";
+  $("modal").classList.remove("hidden");
+}
+const closeForm = () => $("modal").classList.add("hidden");
+
+requireAuth((user, profile) => {
+  role = profile.role;
+  onSnapshot(collection(db, "products"), (snap) => {
+    products = snap.docs.map(d => ({ id: d.id, ...d.data() }))
+      .sort((a, b) => (a.name || "").localeCompare(b.name || ""));
+    render();
+  }, () => { $("list").innerHTML = '<div class="empty">Data load hocche na. Firestore rules check korun.</div>'; });
+});
+
+$("q").addEventListener("input", render);
+$("add").addEventListener("click", () => openForm(null));
+$("cancel").addEventListener("click", closeForm);
+$("out").addEventListener("click", logout);
+
+$("list").addEventListener("click", async (e) => {
+  const ed = e.target.dataset.edit, del = e.target.dataset.del;
+  if (ed) openForm(products.find(p => p.id === ed));
+  if (del && confirm("Ei product delete korben?")) {
+    try { await deleteDoc(doc(db, "products", del)); } catch { alert("Delete kora gelo na."); }
+  }
+});
+
+$("form").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const data = {
+    name: $("name").value.trim(),
+    category: $("category").value.trim(),
+    sku: $("sku").value.trim(),
+    buyPrice: Number($("buy").value),
+    sellPrice: Number($("sell").value),
+    stock: Math.floor(Number($("stock").value)),
+    lowAlert: Math.floor(Number($("low").value || 0)),
+    supplier: $("supplier").value.trim(),
+    updatedAt: serverTimestamp()
+  };
+  if (!data.name) { $("err").textContent = "Nam dite hobe."; return; }
+  $("save").disabled = true;
+  try {
+    if (editingId) await updateDoc(doc(db, "products", editingId), data);
+    else await addDoc(collection(db, "products"), { ...data, createdAt: serverTimestamp() });
+    closeForm();
+  } catch (ex) {
+    $("err").textContent = "Save hoy nai. Rules publish korechen kina check korun.";
+  }
+  $("save").disabled = false;
+});
+</script>
+</body>
+</html>

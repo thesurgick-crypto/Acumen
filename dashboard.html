@@ -19,20 +19,32 @@
     <div class="stat"><span>Ajker bikri</span><p>৳ 0</p></div>
     <div class="stat"><span>Profit</span><p style="color:var(--ok)">৳ 0</p></div>
     <div class="stat"><span>Baki</span><p style="color:var(--bad)">৳ 0</p></div>
-    <div class="stat"><span>Low stock</span><p style="color:var(--orange)">0</p></div>
+    <div class="stat"><span>Low stock</span><p style="color:var(--orange)" id="lowCount">0</p></div>
+    <div class="stat"><span>Total product</span><p id="prodCount">0</p></div>
+    <div class="stat"><span>Stock er dam (kena)</span><p id="stockValue">৳ 0</p></div>
   </div>
 </main>
 <nav class="nav">
   <a class="on" href="dashboard.html">Home</a>
   <a href="#">Sales</a>
-  <a href="#">Stock</a>
+  <a href="products.html">Stock</a>
   <a href="#">Hishab</a>
   <a href="#">More</a>
 </nav>
 <script type="module">
+import { db } from "./js/firebase-config.js";
 import { requireAuth, logout } from "./js/auth.js";
+import { collection, onSnapshot } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+
 requireAuth((user, profile) => {
   document.getElementById("hello").textContent = "Hi " + (profile.name || user.email) + " (" + profile.role + ")";
+  onSnapshot(collection(db, "products"), (snap) => {
+    const list = snap.docs.map(d => d.data());
+    document.getElementById("prodCount").textContent = list.length;
+    document.getElementById("lowCount").textContent = list.filter(p => p.stock <= (p.lowAlert ?? 3)).length;
+    const v = list.reduce((s, p) => s + (p.stock || 0) * (p.buyPrice || 0), 0);
+    document.getElementById("stockValue").textContent = "৳ " + v.toLocaleString("en-US");
+  });
 });
 document.getElementById("out").addEventListener("click", logout);
 </script>
