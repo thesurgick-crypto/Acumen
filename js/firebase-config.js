@@ -4,12 +4,12 @@ import { getFirestore } from "https://www.gstatic.com/firebasejs/10.12.0/firebas
 
 // Firebase Console > Project settings > Your apps > Web app theke ei config ta copy kore boshan
 const firebaseConfig = {
-  apiKey: "PASTE_HERE",
-  authDomain: "PASTE_HERE",
-  projectId: "PASTE_HERE",
-  storageBucket: "PASTE_HERE",
-  messagingSenderId: "PASTE_HERE",
-  appId: "PASTE_HERE"
+  apiKey: "AIzaSyCR9sZyepxKMOc1n71r8jmxVSIFuAGLSj0",
+  authDomain: "surgick-c92f2.firebaseapp.com",
+  projectId: "surgick-c92f2",
+  storageBucket: "surgick-c92f2.firebasestorage.app",
+  messagingSenderId: "233797037313",
+  appId: "1:233797037313:web:12ff4c0f3102757f5e3f00"
 };
 
 const app = initializeApp(firebaseConfig);
