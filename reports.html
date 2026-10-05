@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="bn">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SURGICK - Report</title>
+<link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@500;700&family=Inter:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<div class="top"><div class="logo">SUR<b>G</b>ICK</div><button id="out">Logout</button></div>
+<main>
+  <div class="row"><h2>Report</h2><a class="linkbtn" href="hishab.html">Back</a></div>
+  <select class="filter" id="period">
+    <option value="7">Shesh 7 din</option>
+    <option value="30" selected>Shesh 30 din</option>
+    <option value="month">Ei mash</option>
+  </select>
+  <div id="body"><div class="empty">Loading...</div></div>
+</main>
+<nav class="nav" id="nav"></nav>
+
+<script type="module">
+import { db } from "./js/firebase-config.js";
+import { requireAuth, logout } from "./js/auth.js";
+import { esc, taka, renderNav } from "./js/util.js";
+import { collection, query, where, getDocs, Timestamp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+
+renderNav("hishab");
+const $ = (id) => document.getElementById(id);
+const pad = (n) => String(n).padStart(2, "0");
+const key = (d) => d.getFullYear() + "-" + pad(d.getMonth() + 1) + "-" + pad(d.getDate());
+
+function startDate() {
+  const d = new Date(); d.setHours(0, 0, 0, 0);
+  const v = $("period").value;
+  if (v === "month") d.setDate(1); else d.setDate(d.getDate() - (Number(v) - 1));
+  return d;
+}
+
+async function load() {
+  $("body").innerHTML = '<div class="empty">Loading...</div>';
+  const start = startDate();
+  try {
+    const [ss, ps] = await Promise.all([
+      getDocs(query(collection(db, "sales"), where("createdAt", ">=", Timestamp.fromDate(start)))),
+      getDocs(collection(db, "products"))
+    ]);
+    const all = ss.docs.map(d => d.data());
+    const live = all.filter(s => s.status !== "Returned");
+
+    // daily chart
+    const days = []; const byDay = {};
+    for (const d = new Date(start); d <= new Date(); d.setDate(d.getDate() + 1)) { const k = key(d); days.push({ k, d: d.getDate() }); byDay[k] = 0; }
+    live.forEach(s => { const k = key(s.createdAt.toDate()); if (k in byDay) byDay[k] += s.total; });
+    const max = Math.max(1, ...Object.values(byDay));
+    const step = days.length > 16 ? 5 : 1;
+    const revenue = live.reduce((a, s) => a + s.total, 0);
+
+    // best sellers + customers + status
+    const prod = {}, cust = {}, st = {};
+    all.forEach(s => st[s.status] = (st[s.status] || 0) + 1);
+    live.forEach(s => {
+      s.items.forEach(i => {
+        const p = prod[i.productId] ||= { name: i.name, qty: 0, rev: 0, profit: 0 };
+        p.qty += i.qty; p.rev += i.qty * i.price; p.profit += i.qty * (i.price - i.cost);
+      });
+      if (s.customerId) { const c = cust[s.customerId] ||= { name: s.customerName, total: 0, n: 0 }; c.total += s.total; c.n++; }
+    });
+    const best = Object.values(prod).sort((a, b) => b.qty - a.qty).slice(0, 10);
+    const topC = Object.values(cust).sort((a, b) => b.total - a.total).slice(0, 5);
+    const low = ps.docs.map(d => d.data()).filter(p => p.stock <= (p.lowAlert ?? 3)).sort((a, b) => a.stock - b.stock);
+
+    $("body").innerHTML = `
+      <div class="grid">
+        <div class="stat"><span>Order (return bad)</span><p>${live.length}</p></div>
+        <div class="stat"><span>Mot bikri</span><p>${taka(revenue)}</p></div>
+        <div class="stat"><span>Gorpora order</span><p>${live.length ? taka(revenue / live.length) : "৳ 0"}</p></div>
+        <div class="stat"><span>Return</span><p style="color:var(--bad)">${st.Returned || 0}</p></div>
+      </div>
+
+      <div class="sec">DIN ONUJAYI BIKRI</div>
+      <div class="box">
+        <div class="chart">${days.map(x => `<div class="col" title="${x.k}: ${taka(byDay[x.k])}"><div class="bar2" style="height:${byDay[x.k] / max * 100}%"></div></div>`).join("")}</div>
+        <div class="xl">${days.map((x, i) => `<span>${i % step === 0 ? x.d : ""}</span>`).join("")}</div>
+      </div>
+
+      <div class="sec">ORDER STATUS</div>
+      <div class="box">${["Pending", "Confirmed", "Shipped", "Delivered", "Returned"].map(k => `<div class="line"><span>${k}</span><b>${st[k] || 0}</b></div>`).join("")}</div>
+
+      <div class="sec">SHOB THEKE BESHI BIKRI</div>
+      <div class="box">${best.length ? best.map((p, i) => `<div class="line"><div class="rk"><i>${i + 1}</i><div>${esc(p.name)}<small>${p.qty} pcs</small></div></div>
+        <div class="rt">${taka(p.rev)}<small style="display:block;color:var(--ok);font-size:12px">lav ${taka(p.profit)}</small></div></div>`).join("")
+        : '<div class="empty">Ei somoy e kono bikri nei.</div>'}</div>
+
+      <div class="sec">SHOB THEKE BESHI KENA CUSTOMER</div>
+      <div class="box">${topC.length ? topC.map((c, i) => `<div class="line"><div class="rk"><i>${i + 1}</i><div>${esc(c.name)}<small>${c.n} ta order</small></div></div><b>${taka(c.total)}</b></div>`).join("")
+        : '<div class="empty">Customer record e kono bikri nei.</div>'}</div>
+
+      <div class="sec">LOW STOCK / STOCK SHESH</div>
+      <div class="box">${low.length ? low.map(p => `<div class="line"><span>${esc(p.name)}</span><span class="badge low">${p.stock} pcs</span></div>`).join("")
+        : '<div class="empty">Shob product er stock thik ache.</div>'}</div>
+      <div class="empty" style="font-size:12px">Best seller er bikri discount er age dhora hoyeche. Return howa order gulo bad.</div>`;
+  } catch { $("body").innerHTML = '<div class="empty">Data load hocche na. Rules check korun.</div>'; }
+}
+
+requireAuth((user, profile) => {
+  if (profile.role !== "admin") { $("period").remove(); $("body").innerHTML = '<div class="empty">Report shudhu Admin dekhte parbe.</div>'; return; }
+  load();
+});
+$("period").addEventListener("change", load);
+$("out").addEventListener("click", logout);
+</script>
+</body>
+</html>

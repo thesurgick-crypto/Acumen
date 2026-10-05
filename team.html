@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="bn">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SURGICK - Team</title>
+<link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@500;700&family=Inter:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<div class="top"><div class="logo">SUR<b>G</b>ICK</div><button id="out">Logout</button></div>
+<main>
+  <div class="row"><h2>Team</h2><button class="sm" id="add">+ Staff</button></div>
+  <div id="list"><div class="empty">Loading...</div></div>
+  <div class="empty" style="font-size:12px;margin-top:10px">Staff: product, bikri, customer, purchase, kharoch dekhte o likhte pare, kintu Hishab, Report ar Team dekhte pare na. Delete shudhu Admin pare.</div>
+</main>
+
+<div class="modal hidden" id="modal">
+  <form class="sheet" id="form">
+    <h2>Notun member</h2>
+    <label>Nam *</label><input id="name" required>
+    <label>Email *</label><input id="email" type="email" autocomplete="off" required>
+    <label>Password * (kom pokkhe 6 character)</label><input id="pass" type="text" autocomplete="off" minlength="6" required>
+    <label>Role</label>
+    <select id="role"><option value="staff">Staff</option><option value="admin">Admin</option></select>
+    <div class="err" id="err"></div>
+    <div class="btns">
+      <button type="button" class="ghost" id="cancel">Cancel</button>
+      <button type="submit" id="save">Account banao</button>
+    </div>
+  </form>
+</div>
+<nav class="nav" id="nav"></nav>
+
+<script type="module">
+import { auth, db } from "./js/firebase-config.js";
+import { requireAuth, logout } from "./js/auth.js";
+import { esc, renderNav } from "./js/util.js";
+import { initializeApp, getApps, getApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
+import { getAuth, createUserWithEmailAndPassword, signOut } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
+import { collection, doc, getDocs, setDoc, updateDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+
+renderNav("hishab");
+const $ = (id) => document.getElementById(id);
+let me = null, users = [];
+
+async function load() {
+  try {
+    const snap = await getDocs(collection(db, "users"));
+    users = snap.docs.map(d => ({ id: d.id, ...d.data() })).sort((a, b) => (a.name || "").localeCompare(b.name || ""));
+    render();
+  } catch { $("list").innerHTML = '<div class="empty">Data load hocche na. Rules publish korechen kina check korun.</div>'; }
+}
+
+function render() {
+  $("list").innerHTML = users.map(u => {
+    const self = u.id === me.uid, off = u.active === false;
+    return `<div class="card">
+      <div class="top2"><div><div class="nm">${esc(u.name || "-")}${self ? " (apni)" : ""}</div><div class="meta">${esc(u.email || "")}</div></div>
+      <span class="badge ${off ? "low" : u.role === "admin" ? "warn" : ""}">${off ? "Bondho" : u.role === "admin" ? "Admin" : "Staff"}</span></div>
+      ${self ? "" : `<div class="acts">
+        <button class="ghost" data-role="${u.id}">${u.role === "admin" ? "Staff banao" : "Admin banao"}</button>
+        <button class="${off ? "" : "danger"}" data-active="${u.id}">${off ? "Chalu korun" : "Bondho korun"}</button></div>`}
+    </div>`;
+  }).join("") || '<div class="empty">Kono member nei.</div>';
+}
+
+$("list").addEventListener("click", async (e) => {
+  const { role, active } = e.target.dataset;
+  try {
+    if (role) { const u = users.find(x => x.id === role); if (confirm(u.name + " ke " + (u.role === "admin" ? "Staff" : "Admin") + " korben?")) await updateDoc(doc(db, "users", role), { role: u.role === "admin" ? "staff" : "admin" }); }
+    if (active) { const u = users.find(x => x.id === active); const off = u.active !== false;
+      if (confirm(u.name + " er account " + (off ? "bondho" : "chalu") + " korben?")) await updateDoc(doc(db, "users", active), { active: !off }); }
+    load();
+  } catch { alert("Change hoy nai."); }
+});
+
+$("form").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const err = $("err"); err.textContent = ""; $("save").disabled = true;
+  const name = $("name").value.trim(), email = $("email").value.trim(), pass = $("pass").value, role = $("role").value;
+  try {
+    // Alada app instance e account banai, jate apni (admin) logout na hoyen
+    const sec = getApps().some(a => a.name === "secondary") ? getApp("secondary") : initializeApp(auth.app.options, "secondary");
+    const sAuth = getAuth(sec);
+    const cred = await createUserWithEmailAndPassword(sAuth, email, pass);
+    await signOut(sAuth);
+    await setDoc(doc(db, "users", cred.user.uid), { name, email, role, active: true, createdAt: serverTimestamp() });
+    $("modal").classList.add("hidden"); load();
+  } catch (ex) {
+    err.textContent = ex.code === "auth/email-already-in-use" ? "Ei email diye account ache."
+      : ex.code === "auth/weak-password" ? "Password aro shokto din (6+ character)."
+      : ex.code === "auth/invalid-email" ? "Email thik nai."
+      : "Account banano jay nai. Rules publish korechen kina check korun.";
+  }
+  $("save").disabled = false;
+});
+
+requireAuth((user, profile) => {
+  me = user;
+  if (profile.role !== "admin") { $("add").remove(); $("list").innerHTML = '<div class="empty">Team shudhu Admin dekhte parbe.</div>'; return; }
+  load();
+});
+$("add").addEventListener("click", () => { $("form").reset(); $("err").textContent = ""; $("modal").classList.remove("hidden"); });
+$("cancel").addEventListener("click", () => $("modal").classList.add("hidden"));
+$("out").addEventListener("click", logout);
+</script>
+</body>
+</html>
