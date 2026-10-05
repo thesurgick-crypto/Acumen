@@ -8,7 +8,7 @@ export const fmtDate = (ts) => (ts?.toDate ? ts.toDate() : new Date())
 
 export function renderNav(active) {
   const items = [["home", "dashboard.html", "Home"], ["sales", "sales.html", "Sales"],
-    ["stock", "products.html", "Stock"], ["customers", "customers.html", "Customers"], ["hishab", "#", "Hishab"]];
+    ["stock", "products.html", "Stock"], ["customers", "customers.html", "Customers"], ["hishab", "hishab.html", "Hishab"]];
   document.getElementById("nav").innerHTML = items
     .map(([k, h, l]) => `<a class="${k === active ? "on" : ""}" href="${h}">${l}</a>`).join("");
 }
