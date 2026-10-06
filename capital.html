@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="bn">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SURGICK - Investment</title>
+<link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@500;700&family=Inter:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<div class="top"><div class="logo">SUR<b>G</b>ICK</div><button id="out">Logout</button></div>
+<main>
+  <div class="row"><h2>Investment</h2><button class="sm" id="add">+ Entry</button></div>
+  <div id="body"><div class="empty">Loading...</div></div>
+</main>
+
+<div class="modal hidden" id="modal">
+  <form class="sheet" id="form">
+    <h2>Notun entry</h2>
+    <label>Dhoron</label>
+    <select id="type">
+      <option value="invest">Taka dhukalam (cash investment)</option>
+      <option value="stock">Agey kena mal (stock e lagano)</option>
+      <option value="withdraw">Taka tullam (withdraw)</option>
+    </select>
+    <div class="two">
+      <div><label>Taka (৳) *</label><input id="amount" type="number" min="1" step="any" inputmode="decimal" required></div>
+      <div><label>Tarikh</label><input id="date" type="date" required></div>
+    </div>
+    <label>Note</label><input id="note" placeholder="Jemon: shuru te nijer taka">
+    <div class="err" id="err"></div>
+    <div class="btns">
+      <button type="button" class="ghost" id="cancel">Cancel</button>
+      <button type="submit" id="save">Save</button>
+    </div>
+  </form>
+</div>
+<nav class="nav" id="nav"></nav>
+
+<script type="module">
+import { db } from "./js/firebase-config.js";
+import { requireAuth, logout } from "./js/auth.js";
+import { esc, taka, renderNav } from "./js/util.js";
+import { collection, addDoc, deleteDoc, doc, getDocs, Timestamp, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+
+renderNav("hishab");
+const $ = (id) => document.getElementById(id);
+const pad = (n) => String(n).padStart(2, "0");
+const todayStr = () => { const d = new Date(); return d.getFullYear() + "-" + pad(d.getMonth() + 1) + "-" + pad(d.getDate()); };
+const LABEL = { invest: "Cash investment", stock: "Agey kena mal", withdraw: "Withdraw" };
+let me = "";
+
+async function load() {
+  $("body").innerHTML = '<div class="empty">Loading...</div>';
+  try {
+    const g = (c) => getDocs(collection(db, c));
+    const [s, pay, pur, sp, ex, cap, pr, cu, su] = await Promise.all(
+      ["sales", "payments", "purchases", "supplierPayments", "expenses", "capital", "products", "customers", "suppliers"].map(g));
+    const sum = (snap, f) => snap.docs.reduce((a, d) => a + (f(d.data()) || 0), 0);
+
+    const salesPaid = s.docs.map(d => d.data()).filter(x => x.status !== "Returned").reduce((a, x) => a + (x.paid || 0), 0);
+    const custPaid = sum(pay, x => x.amount);
+    const purTotal = sum(pur, x => x.total), purPaid = sum(pur, x => x.paid);
+    const supPaid = sum(sp, x => x.amount);
+    const expTotal = sum(ex, x => x.amount);
+    const caps = cap.docs.map(d => ({ id: d.id, ...d.data() })).sort((a, b) => b.date.seconds - a.date.seconds);
+    const by = (t) => caps.filter(c => c.type === t).reduce((a, c) => a + c.amount, 0);
+    const invCash = by("invest"), invStock = by("stock"), withdraw = by("withdraw");
+
+    const cash = invCash + salesPaid + custPaid - purPaid - supPaid - expTotal - withdraw;
+    const stockValue = sum(pr, p => (p.stock || 0) * (p.buyPrice || 0));
+    const custDue = sum(cu, c => c.due), supDue = sum(su, x => x.due);
+    const worth = cash + stockValue + custDue - supDue;
+    const invested = invCash + invStock;
+    const profit = worth + withdraw - invested;
+    const col = (n) => n >= 0 ? "var(--ok)" : "var(--bad)";
+
+    $("body").innerHTML = `
+      <div class="stat"><span>Hate / account e ekhon koto taka ache</span><p style="color:${col(cash)}">${taka(cash)}</p></div>
+      <div class="grid" style="margin-top:10px">
+        <div class="stat"><span>Mot investment</span><p>${taka(invested)}</p></div>
+        <div class="stat"><span>Business er mot mulyo</span><p>${taka(worth)}</p></div>
+      </div>
+      <div class="stat" style="margin-top:10px"><span>Ekhon porjonto ${profit >= 0 ? "lav" : "khoti"} (investment er tulonay)</span>
+        <p style="color:${col(profit)}">${taka(profit)}</p></div>
+
+      <div class="sec">TAKA KOTHAY GELO</div>
+      <div class="box">
+        <div class="line"><span>Mal kena (total)</span><b>${taka(purTotal)}</b></div>
+        <div class="line"><span>Kharoch (ad, delivery, ityadi)</span><b>${taka(expTotal)}</b></div>
+        <div class="line"><span>Nijer jonno tulechi</span><b>${taka(withdraw)}</b></div>
+      </div>
+
+      <div class="sec">EKHON KOTHAY ACHE</div>
+      <div class="box">
+        <div class="line"><span>Hate / account e</span><b style="color:${col(cash)}">${taka(cash)}</b></div>
+        <div class="line"><span>Stock e mal (kena dam e)</span><b>${taka(stockValue)}</b></div>
+        <div class="line"><span>Customer er kach e pabo</span><b>${taka(custDue)}</b></div>
+        <div class="line"><span>Supplier ke debo</span><b style="color:var(--bad)">- ${taka(supDue)}</b></div>
+      </div>
+
+      <div class="sec">INVESTMENT ENTRY GULO</div>
+      <div class="box">${caps.length ? caps.map(c => `<div class="line"><div>${LABEL[c.type]}<small style="display:block;color:var(--muted);font-size:12px">${c.date.toDate().toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" })}${c.note ? " · " + esc(c.note) : ""}</small></div>
+        <span style="display:flex;gap:10px;align-items:center"><b style="color:${c.type === "withdraw" ? "var(--bad)" : "inherit"}">${c.type === "withdraw" ? "- " : ""}${taka(c.amount)}</b>
+        <button class="danger mini" data-del="${c.id}">×</button></span></div>`).join("")
+        : '<div class="empty">Ekhono kono entry nei. Shuru te koto taka dhukiyechen sheta + Entry diye din.</div>'}</div>
+      <div class="empty" style="font-size:12px;text-align:left">
+        Hate koto taka ache eta app e dewa shob bikri, joma, mal kena, kharoch theke hishab kora. Mil na hole, apnar shuru er investment ba purono entry gulo ekhono dewa hoyni.
+        Return howa order er joma taka ferot dewa dhora hoyeche. Cash/bKash/bank alada dekhano jay na.</div>`;
+  } catch { $("body").innerHTML = '<div class="empty">Data load hocche na. Rules publish korechen kina check korun.</div>'; }
+}
+
+requireAuth((user, profile) => {
+  me = profile.name || user.email;
+  if (profile.role !== "admin") { $("add").remove(); $("body").innerHTML = '<div class="empty">Investment shudhu Admin dekhte parbe.</div>'; return; }
+  load();
+});
+$("add").addEventListener("click", () => { $("form").reset(); $("date").value = todayStr(); $("err").textContent = ""; $("modal").classList.remove("hidden"); });
+$("cancel").addEventListener("click", () => $("modal").classList.add("hidden"));
+$("out").addEventListener("click", logout);
+$("body").addEventListener("click", async (e) => {
+  const id = e.target.dataset.del;
+  if (id && confirm("Ei entry delete korben?")) { try { await deleteDoc(doc(db, "capital", id)); load(); } catch { alert("Delete kora gelo na."); } }
+});
+$("form").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const amount = Number($("amount").value);
+  if (!(amount > 0)) { $("err").textContent = "Taka ta thik din."; return; }
+  $("save").disabled = true;
+  try {
+    await addDoc(collection(db, "capital"), {
+      type: $("type").value, amount, note: $("note").value.trim(),
+      date: Timestamp.fromDate(new Date($("date").value + "T12:00:00")), createdBy: me, createdAt: serverTimestamp()
+    });
+    $("modal").classList.add("hidden"); load();
+  } catch { $("err").textContent = "Save hoy nai. Rules publish korechen kina check korun."; }
+  $("save").disabled = false;
+});
+</script>
+</body>
+</html>

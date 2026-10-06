@@ -49,6 +49,13 @@ service cloud.firestore {
       allow delete: if isAdmin();
     }
 
+    // Step 6: investment / cash (admin only)
+    match /capital/{id} {
+      allow read, create: if isAdmin();
+      allow update: if false;
+      allow delete: if isAdmin();
+    }
+
     match /meta/{id} {
       allow read, write: if isStaff();
     }
